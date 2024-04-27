@@ -1,0 +1,6 @@
+04-27-2024
+    Make some choice tests, and fix the vote tests afterwards, Then countinue 
+    with part 6
+04-23-2024
+    countinue with part 5: https://docs.djangoproject.com/en/4.2/intro/tutorial04/
+    
