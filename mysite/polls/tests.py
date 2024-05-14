@@ -6,8 +6,10 @@ import datetime
 from django.test import TestCase
 from django.utils import timezone
 from django.urls import reverse
+from django.shortcuts import get_object_or_404, render
 from .models import Question
 from .models import Choice
+from django.http import HttpResponseRedirect
 
 
 class QuestionModelTests(TestCase):
@@ -55,19 +57,6 @@ def create_choice(question, choice_text, votes):
     """
     return Choice.objects.create(question=question, choice_text=choice_text, votes=votes)
 
-def vote_on_choice(test_case, question_id, choice_id):
-    """
-    Simulates voting on a choice by posting to the vote view.
-    Args:
-    - test_case: an instance of TestCase or any subclass.
-    - question_id: the ID of the question being voted on.
-    - choice_id: the ID of the choice being voted on.
-
-    Returns the response from the vote attempt.
-    """
-    url = reverse('polls:vote', args=(question_id,))
-    response = test_case.client.post(url, {'choice': choice_id})
-    return response
 
 class QuestionIndexViewTests(TestCase):
     def test_no_questions(self):
@@ -166,15 +155,44 @@ class QuestionResultsViewTests(TestCase):
         response = self.client.get(url)
         self.assertContains(response, past_question.question_text)
 
-
-
 class VoteViewTests(TestCase):
-    def test_valid_vote(self):
-        question = create_question(question_text="Question.", days=-1)
-        choice1 = create_choice(question=question, choice_text="Choice1", votes=0)
-        url = reverse("polls:vote", args=(question.id,))
-        response = self.client.post(url, {'choice': choice1.id})
-        vote_on_choice(TestCase, question.id, choice1.id)
-        self.assertEqual(response.status_code, 302)  # check for redirect
-        self.assertEqual(choice1.votes, 1)  # choice vote should increment
-        
+    def setUp(self):
+        # Create a question with a publication date
+        self.question = Question.objects.create(
+            question_text="Sample Question?",
+            pub_date=timezone.now()  # Add a publication date here
+        )
+        self.choice1 = Choice.objects.create(question=self.question, choice_text="Choice 1", votes=0)
+        self.choice2 = Choice.objects.create(question=self.question, choice_text="Choice 2", votes=0)
+
+    def test_vote_success(self):
+        """
+        A valid POST request should increment the votes for the selected choice.
+        """
+        url = reverse('polls:vote', args=(self.question.id,))
+        response = self.client.post(url, {'choice': self.choice1.id})
+        self.choice1.refresh_from_db()
+
+        self.assertEqual(self.choice1.votes, 1)
+        self.assertIsInstance(response, HttpResponseRedirect)
+        self.assertEqual(response.url, reverse('polls:results', args=(self.question.id,)))
+
+    def test_vote_error_no_choice(self):
+        """
+        Posting with no choice should return an error message.
+        """
+        url = reverse('polls:vote', args=(self.question.id,))
+        response = self.client.post(url)
+        print("output\n\n\n",response.content,"\n\n\n") 
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You didn&#x27;t select a choice.")
+
+    def test_vote_invalid_choice(self):
+        """
+        Posting with a non-existent choice ID should handle the exception and show an appropriate message.
+        """
+        url = reverse('polls:vote', args=(self.question.id,))
+        response = self.client.post(url, {'choice': 999})  # Assuming 999 is an invalid choice ID
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You didn&#x27;t select a choice.")
